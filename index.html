@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Supervisi Akademik Real-Time Kurikulum Merdeka</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SheetJS (xlsx) CDN untuk Upload File Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- SDK Firebase JS (v9 Modular Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            .tab-content {
+                display: block !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin-bottom: 2rem !important;
+            }
+            #sec-daftar-guru {
+                display: none !important;
+            }
+            body {
+                background: white;
+                color: black;
+                padding: 0;
+                margin: 0;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            /* Grid 2 Kolom khusus untuk cetakan identitas */
+            .print-grid-2 {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.75rem 1.5rem !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- STATUS INDIKATOR REALTIME -->
+    <div id="sync-status" class="bg-amber-500 text-white text-xs px-4 py-1 text-center font-medium no-print transition-all">
+        <i class="fa-solid fa-spinner fa-spin mr-1"></i> Menghubungkan ke Database Real-time...
+    </div>
+
+    <!-- NOTIFIKASI TOAST CUSTOM (Ganti alert/confirm UI) -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none no-print"></div>
+
+    <!-- MODAL CONFIRMATION CUSTOM -->
+    <div id="custom-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden no-print">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 m-4 animate-fade-in">
+            <h3 id="modal-title" class="text-lg font-bold text-slate-800 mb-2">Konfirmasi</h3>
+            <p id="modal-message" class="text-sm text-slate-600 mb-6">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+            <div class="flex justify-end gap-3">
+                <button type="button" id="modal-cancel-btn" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold rounded-lg transition">Batal</button>
+                <button type="button" id="modal-confirm-btn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="bg-indigo-700 text-white shadow-lg no-print sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-mosque text-3xl text-amber-300"></i>
+                <div>
+                    <h1 class="font-bold text-xl leading-tight">Supervisi Akademik Real-Time</h1>
+                    <p class="text-xs text-indigo-200">KMA No. 1503 Tahun 2025 (Pembelajaran Mendalam & Kurikulum Berbasis Cinta)</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="switchTab('identitas')" id="tab-identitas" class="nav-btn bg-indigo-600 ring-2 ring-white px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-id-card"></i> 1. Identitas
+                </button>
+                <button onclick="switchTab('daftar-guru')" id="tab-daftar-guru" class="nav-btn bg-indigo-800 hover:bg-indigo-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-users"></i> Kelola Guru
+                </button>
+                <button onclick="switchTab('perencanaan')" id="tab-perencanaan" class="nav-btn bg-indigo-800 hover:bg-indigo-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-pen"></i> 2. Perencanaan
+                </button>
+                <button onclick="switchTab('pelaksanaan')" id="tab-pelaksanaan" class="nav-btn bg-indigo-800 hover:bg-indigo-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-chalkboard-user"></i> 3. Pelaksanaan
+                </button>
+                <button onclick="switchTab('evaluasi')" id="tab-evaluasi" class="nav-btn bg-indigo-800 hover:bg-indigo-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line"></i> 4. Evaluasi & TL
+                </button>
+                <button onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow transition flex items-center gap-2 ml-2">
+                    <i class="fa-solid fa-print"></i> Cetak Dokumen
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+
+        <!-- KOP CETAK DOKUMEN -->
+        <div class="hidden print-only mb-6 text-center border-b-2 border-slate-900 pb-4">
+            <h2 class="text-xl font-bold uppercase tracking-wide">INSTRUMEN SUPERVISI AKADEMIK MADRASAH</h2>
+            <p class="text-xs font-semibold text-indigo-900 uppercase tracking-widest mb-1">Sesuai KMA Nomor 1503 Tahun 2025 (Perubahan KMA 450/2024)</p>
+            <h3 class="text-lg font-semibold text-slate-700" id="print-sekolah-title">Nama Madrasah / Satuan Pendidikan</h3>
+            <p class="text-sm text-slate-500">Tahun Ajaran <span id="print-ta">2026/2027</span></p>
+        </div>
+
+        <!-- FORM CONTAINER -->
+        <form id="supervisiForm" onsubmit="event.preventDefault();">
+
+            <!-- SECTION 1: IDENTITAS -->
+            <section id="sec-identitas" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+                <div class="border-b border-slate-200 pb-4 mb-4 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-indigo-600 no-print"></i> Data Informasi Supervisi
+                    </h2>
+                    <span class="text-xs bg-indigo-100 text-indigo-800 font-medium px-2.5 py-0.5 rounded no-print">Langkah 1 dari 4</span>
+                </div>
+
+                <div class="mb-5 p-4 bg-indigo-50/70 rounded-lg border border-indigo-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 no-print">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-user-check text-indigo-600 text-xl"></i>
+                        <div>
+                            <p class="text-sm font-semibold text-indigo-950">Pilih Guru Dari Daftar Kelola Guru</p>
+                            <p class="text-xs text-indigo-700">Pilih nama guru yang tersimpan untuk mengisi formulir secara otomatis.</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <select id="select-guru-opt" onchange="loadSelectedGuru(this.value)" class="w-full md:w-64 px-3 py-2 text-sm border border-indigo-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">-- Pilih Guru --</option>
+                        </select>
+                        <button type="button" onclick="switchTab('daftar-guru')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap transition">
+                            <i class="fa-solid fa-plus"></i> Import / Kelola
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 print-grid-2">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Nama Madrasah / Satuan Pendidikan</label>
+                        <input type="text" id="nama_sekolah" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Contoh: MTs. Tajhiz Diniyah">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Tahun Ajaran</label>
+                        <input type="text" id="tahun_ajaran" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Contoh: 2026/2027">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Nama Guru Yang Disupervisi</label>
+                        <input type="text" id="nama_guru" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nama Lengkap & Gelar">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">NIP Guru</label>
+                        <input type="text" id="nip_guru" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="-">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Mata Pelajaran / Fase / Kelas</label>
+                        <input type="text" id="mapel_kelas" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Contoh: Bahasa Indonesia / Fase D / Kelas 7">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Nama Supervisor / Kepala Sekolah</label>
+                        <input type="text" id="nama_supervisor" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nama Supervisor & Gelar">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Tanggal Supervisi</label>
+                        <input type="date" id="tgl_supervisi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Tujuan Pembelajaran / Topik Materi</label>
+                        <input type="text" id="topik_materi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Tuliskan materi/konsep utama yang diamati">
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end no-print">
+                    <button type="button" onclick="switchTab('perencanaan')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        Lanjut ke Perencanaan <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION DAFTAR GURU -->
+            <section id="sec-daftar-guru" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 hidden">
+                <div class="border-b border-slate-200 pb-4 mb-4 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-users text-indigo-600"></i> Kelola Daftar Guru & Import Excel
+                        </h2>
+                        <p class="text-xs text-slate-500">Semua perubahan daftar guru tersinkronisasi otomatis di seluruh perangkat secara real-time.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                        <h3 class="font-bold text-emerald-800 text-sm mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel text-emerald-600"></i> Import Data dari File Excel
+                        </h3>
+                        <p class="text-xs text-emerald-700 mb-3">Format kolom Excel: <b>Nama Guru</b>, <b>NIP</b>, <b>Mata Pelajaran / Kelas</b></p>
+                        
+                        <div class="flex items-center gap-2">
+                            <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer">
+                            <button type="button" onclick="downloadTemplateExcel()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap">
+                                <i class="fa-solid fa-download"></i> Template
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <h3 class="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-user-plus text-indigo-600"></i> Tambah Guru Secara Manual
+                        </h3>
+                        <div class="grid grid-cols-1 gap-2">
+                            <input type="text" id="manual_nama" placeholder="Nama Guru & Gelar" class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="manual_nip" placeholder="NIP Guru" class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs">
+                                <input type="text" id="manual_mapel" placeholder="Mapel / Kelas" class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs">
+                            </div>
+                            <button type="button" onclick="addGuruManual()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-1.5 rounded font-medium transition">
+                                + Tambahkan ke Daftar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600 border-collapse">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                            <tr>
+                                <th class="p-3 border border-slate-300 w-12 text-center">No</th>
+                                <th class="p-3 border border-slate-300">Nama Guru</th>
+                                <th class="p-3 border border-slate-300">NIP</th>
+                                <th class="p-3 border border-slate-300">Mata Pelajaran / Kelas</th>
+                                <th class="p-3 border border-slate-300 w-48 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-guru-list"></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-6 flex justify-between no-print">
+                    <button type="button" onclick="confirmClearAllGuru()" class="text-red-600 hover:text-red-700 text-xs font-semibold">
+                        <i class="fa-solid fa-trash"></i> Hapus Semua Guru
+                    </button>
+                    <button type="button" onclick="switchTab('identitas')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        Kembali ke Formulir <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION 2: PERENCANAAN -->
+            <section id="sec-perencanaan" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 hidden">
+                <div class="border-b border-slate-200 pb-4 mb-4 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-file-signature text-indigo-600"></i> Tahap 1: Perencanaan Pembelajaran (Pra-Observasi KMA 1503/2025)
+                        </h2>
+                        <p class="text-xs text-slate-500">Telaah Dokumen Modul Ajar / RPP Berbasis Pembelajaran Mendalam & Kurikulum Berbasis Cinta</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="autoFillPlanNotes()" class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-semibold shadow-sm transition flex items-center gap-1 no-print">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Isi Catatan Otomatis
+                        </button>
+                        <span class="text-xs bg-indigo-100 text-indigo-800 font-medium px-2.5 py-0.5 rounded">Langkah 2 dari 4</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600 border-collapse">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                            <tr>
+                                <th class="p-3 border border-slate-300 w-12 text-center">No</th>
+                                <th class="p-3 border border-slate-300 w-1/3">Indikator Perencanaan (KMA 1503 Th 2025)</th>
+                                <th class="p-3 border border-slate-300 w-24 text-center">Ada / Tidak</th>
+                                <th class="p-3 border border-slate-300 w-24 text-center">Skor (1-4)</th>
+                                <th class="p-3 border border-slate-300">Catatan / Saran Pembenahan</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-perencanaan"></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                    <span class="font-semibold text-slate-700">Skor Akhir Perencanaan (Skala 100):</span>
+                    <span id="score-perencanaan" class="text-xl font-bold text-indigo-700">0.0</span>
+                </div>
+
+                <div class="mt-6 flex justify-between no-print">
+                    <button type="button" onclick="switchTab('identitas')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium transition">
+                        <i class="fa-solid fa-arrow-left"></i> Kembali
+                    </button>
+                    <button type="button" onclick="switchTab('pelaksanaan')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        Lanjut ke Pelaksanaan <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION 3: PELAKSANAAN -->
+            <section id="sec-pelaksanaan" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 hidden">
+                <div class="border-b border-slate-200 pb-4 mb-4 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-display text-indigo-600"></i> Tahap 2: Pelaksanaan Pembelajaran (Observasi Kelas KMA 1503/2025)
+                        </h2>
+                        <p class="text-xs text-slate-500">Pengamatan Pembelajaran Mendalam (Berkesadaran, Bermakna, Menggembirakan) & Panca Cinta</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="autoFillExecNotes()" class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-semibold shadow-sm transition flex items-center gap-1 no-print">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Isi Catatan Otomatis
+                        </button>
+                        <span class="text-xs bg-indigo-100 text-indigo-800 font-medium px-2.5 py-0.5 rounded">Langkah 3 dari 4</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600 border-collapse">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-100">
+                            <tr>
+                                <th class="p-3 border border-slate-300 w-12 text-center">No</th>
+                                <th class="p-3 border border-slate-300 w-1/3">Indikator Observasi Kelas (KMA 1503 Th 2025)</th>
+                                <th class="p-3 border border-slate-300 w-24 text-center">Skor (1-4)</th>
+                                <th class="p-3 border border-slate-300">Catatan Pengamatan / Deskripsi Perilaku</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-pelaksanaan"></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                    <span class="font-semibold text-slate-700">Skor Akhir Pelaksanaan (Skala 100):</span>
+                    <span id="score-pelaksanaan" class="text-xl font-bold text-indigo-700">0.0</span>
+                </div>
+
+                <div class="mt-6 flex justify-between no-print">
+                    <button type="button" onclick="switchTab('perencanaan')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium transition">
+                        <i class="fa-solid fa-arrow-left"></i> Kembali
+                    </button>
+                    <button type="button" onclick="switchTab('evaluasi')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                        Lanjut ke Evaluasi & TL <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- SECTION 4: EVALUASI & TINDAK LANJUT -->
+            <section id="sec-evaluasi" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6 hidden">
+                <div class="border-b border-slate-200 pb-4 mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-square-poll-vertical text-indigo-600"></i> Tahap 3: Evaluasi & Rencana Tindak Lanjut (Pasca-Observasi)
+                        </h2>
+                        <p class="text-xs text-slate-500">Refleksi, Feedback Konsultatif, dan Rencana Pengembangan</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="generateAutoEvaluation()" class="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-semibold shadow-sm transition flex items-center gap-1.5 no-print">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Isi Otomatis (Auto-Fill)
+                        </button>
+                        <span class="text-xs bg-indigo-100 text-indigo-800 font-medium px-2.5 py-0.5 rounded">Langkah 4 dari 4</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-center">
+                        <p class="text-xs text-indigo-600 font-semibold uppercase">Nilai Perencanaan</p>
+                        <p class="text-2xl font-bold text-indigo-900" id="final-plan">0.0</p>
+                    </div>
+                    <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-center">
+                        <p class="text-xs text-indigo-600 font-semibold uppercase">Nilai Pelaksanaan</p>
+                        <p class="text-2xl font-bold text-indigo-900" id="final-exec">0.0</p>
+                    </div>
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                        <p class="text-xs text-amber-700 font-semibold uppercase">Predikat Kinerja (Rata-rata)</p>
+                        <p class="text-xl font-bold text-amber-900" id="final-predicate">Belum Dinilai</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Catatan Refleksi Guru (Apa yang sudah baik & perlu ditingkatkan?)</label>
+                        <textarea id="eval_refleksi" rows="3" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Isikan refleksi dari hasil diskusi bersama guru..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Umpan Balik Supervisor (Apresiasi & Rekomendasi)</label>
+                        <textarea id="eval_feedback" rows="3" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Berikan umpan balik konstruktif..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Rencana Tindak Lanjut (RTL) / Program Pengayaan & Pelatihan</label>
+                        <textarea id="eval_rtl" rows="3" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Mengikuti Pelatihan Mandiri PMM Topik Pembelajaran Berdiferensiasi, Peer-coaching dengan Rekan Sejawat, dll."></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-12 pt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-center">
+                    <div>
+                        <p class="text-sm text-slate-600">Guru Yang Disupervisi</p>
+                        <div class="h-20"></div>
+                        <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-guru-name">( Nama Guru )</p>
+                        <p class="text-xs text-slate-500 mt-1">NIP. <span id="ttd-guru-nip">-</span></p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-600">Supervisor / Kepala Sekolah</p>
+                        <div class="h-20"></div>
+                        <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-supervisor-name">( Nama Supervisor )</p>
+                        <p class="text-xs text-slate-500 mt-1">NIP/NIDN. -</p>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-between no-print">
+                    <button type="button" onclick="switchTab('pelaksanaan')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium transition">
+                        <i class="fa-solid fa-arrow-left"></i> Kembali
+                    </button>
+                    <button type="button" onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-lg font-bold shadow-md transition flex items-center gap-2">
+                        <i class="fa-solid fa-print"></i> Simpan & Cetak Hasil Supervisi
+                    </button>
+                </div>
+            </section>
+        </form>
+    </main>
+
+    <footer class="bg-slate-800 text-slate-400 py-4 text-center text-xs no-print mt-auto">
+        <p>© 2026 Aplikasi Supervisi Akademik Kurikulum Merdeka - By. Ahmad Azwar, S.Pd.</p>
+    </footer>
+
+    <script>
+        // =========================================================================
+        // 1. KONFIGURASI REALTIME FIREBASE DATABASE & NOTIFIKASI
+        // =========================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBrawkVBsvXGLL4sBW_znTbMMd_EQfvR8",
+            authDomain: "supervisi-akademik-zwara-01.firebaseapp.com",
+            databaseURL: "https://supervisi-akademik-zwara-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "supervisi-akademik-zwara-01",
+            storageBucket: "supervisi-akademik-zwara-01.firebasestorage.app",
+            messagingSenderId: "35661242884",
+            appId: "1:35661242884:web:1cdebe7e9023b2690f4b51",
+        };
+
+        // Inisialisasi Firebase
+        let db;
+        let isRemoteUpdate = false; // Mencegah siklus rekursif perubahan input
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+        } catch (err) {
+            console.error("Gagal menginisialisasi Firebase:", err);
+        }
+
+        // Variable Local Data
+        let listGuru = [
+            { id: 1, nama: "Nurzaman, S.Ag", nip: "198503122010011002", mapel: "IPS / Fase D / Kelas 8" },
+            { id: 2, nama: "Ahmad Azwar", nip: "1987231187102006", mapel: "Bahasa Indonesia / Fase E / Kelas 7" }
+        ];
+
+        // Indikator KMA 1503 Tahun 2025
+        const itemsPerencanaan = [
+            "Kejelasan Capaian Pembelajaran (CP) serta Tujuan Pembelajaran (TP) yang terintegrasi nilai keagamaan/karakter",
+            "Kesesuaian Asesmen Awal Pembelajaran (Diagnostik) untuk memetakan kesiapan peserta didik",
+            "Rancangan Pembelajaran Mendalam (Deep Learning): Memuat tahapan pemahaman, aplikasi, dan refleksi kontekstual",
+            "Integrasi Prinsip Kurikulum Berbasis Cinta (KBC): Panca Cinta (Cinta Allah/Rasul, Ilmu, Lingkungan, Diri/Sesama, Tanah Air)",
+            "Rancangan Strategi Pembelajaran Berdiferensiasi (Konten, Proses, Produk) yang inklusif",
+            "Rancangan Asesmen Formatif & Sumatif yang mengukur olah pikir, hati, rasa, dan raga secara holistik",
+            "Pemanfaatan Media/Teknologi Digital dan Lingkungan Belajar yang aman, ramah, dan kondusif"
+        ];
+
+        const itemsPelaksanaan = [
+            "Menciptakan Lingkungan Belajar Ramah & Menggembirakan (Joyful Learning) berlandaskan empati dan kasih sayang",
+            "Mendorong Pembelajaran Berkesadaran (Mindful Learning): Peserta didik memahami tujuan belajar dan regulasi diri",
+            "Menerapkan Pembelajaran Bermakna (Meaningful Learning): Menghubungkan materi dengan kehidupan nyata & integrasi sains-agama",
+            "Mengimplementasikan Pembelajaran Berdiferensiasi sesuai tingkat kesiapan dan potensi peserta didik",
+            "Memfasilitasi diskusi kritis, kolaborasi, dan kemitraan belajar yang aktif antar peserta didik",
+            "Mengintegrasikan nilai Panca Cinta (Cinta Allah/Rasul, Ilmu, Lingkungan, Diri/Sesama, Tanah Air) selama proses belajar",
+            "Memberikan umpan balik (feedback) formatif secara konstruktif dan santun",
+            "Melakukan refleksi bersama peserta didik untuk menutup pembelajaran dengan berkesan"
+        ];
+
+        // Sistem Toast Custom Notification
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : 'bg-slate-800';
+            
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2 pointer-events-auto transition-all duration-300 opacity-0 transform translate-y-2`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-info-circle'}"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-2'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Custom Confirmation Dialog
+        function showConfirm(title, message, onConfirm) {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            
+            modal.classList.remove('hidden');
+
+            const btnCancel = document.getElementById('modal-cancel-btn');
+            const btnConfirm = document.getElementById('modal-confirm-btn');
+
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                btnCancel.removeEventListener('click', onCancel);
+                btnConfirm.removeEventListener('click', onOk);
+            };
+
+            const onCancel = () => cleanup();
+            const onOk = () => {
+                cleanup();
+                onConfirm();
+            };
+
+            btnCancel.addEventListener('click', onCancel);
+            btnConfirm.addEventListener('click', onOk);
+        }
+
+        // =========================================================================
+        // 2. FUNGSI SINKRONISASI REALTIME (LISTEN & SAVE)
+        // =========================================================================
+        
+        function initRealtimeSync() {
+            if (!db) {
+                updateStatus("Off-line (Tanpa Firebase)", "bg-red-500");
+                return;
+            }
+
+            db.ref('.info/connected').on('value', (snap) => {
+                if (snap.val() === true) {
+                    updateStatus("Terhubung ke Real-time Database", "bg-emerald-600");
+                } else {
+                    updateStatus("Menghubungkan ke Database Real-time...", "bg-amber-500");
+                }
+            });
+
+            db.ref('supervisi_data').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    isRemoteUpdate = true;
+                    applyRemoteData(data);
+                    isRemoteUpdate = false;
+                }
+            });
+        }
+
+        function updateStatus(text, bgClass) {
+            const statusEl = document.getElementById('sync-status');
+            statusEl.className = `${bgClass} text-white text-xs px-4 py-1 text-center font-medium no-print transition-all`;
+            statusEl.innerHTML = text.includes('spin') ? text : `<i class="fa-solid fa-wifi mr-1"></i> ${text}`;
+        }
+
+        // Kirim Seluruh Data Form ke Firebase Realtime DB
+        function pushDataToFirebase() {
+            if (!db || isRemoteUpdate) return;
+
+            const formData = {
+                identitas: {
+                    nama_sekolah: document.getElementById('nama_sekolah').value,
+                    tahun_ajaran: document.getElementById('tahun_ajaran').value,
+                    nama_guru: document.getElementById('nama_guru').value,
+                    nip_guru: document.getElementById('nip_guru').value,
+                    mapel_kelas: document.getElementById('mapel_kelas').value,
+                    nama_supervisor: document.getElementById('nama_supervisor').value,
+                    tgl_supervisi: document.getElementById('tgl_supervisi').value,
+                    topik_materi: document.getElementById('topik_materi').value
+                },
+                evaluasi: {
+                    refleksi: document.getElementById('eval_refleksi').value,
+                    feedback: document.getElementById('eval_feedback').value,
+                    rtl: document.getElementById('eval_rtl').value
+                },
+                perencanaan: getTableValues('#tbl-perencanaan', '.plan-score', '.plan-note', true),
+                pelaksanaan: getTableValues('#tbl-pelaksanaan', '.exec-score', '.exec-note', false),
+                listGuru: listGuru
+            };
+
+            db.ref('supervisi_data').set(formData);
+        }
+
+        // Terapkan Data Realtime yang Diterima ke Antarmuka App
+        function applyRemoteData(data) {
+            if (data.identitas) {
+                for (const key in data.identitas) {
+                    const el = document.getElementById(key);
+                    if (el) el.value = data.identitas[key] || '';
+                }
+            }
+
+            if (data.evaluasi) {
+                document.getElementById('eval_refleksi').value = data.evaluasi.refleksi || '';
+                document.getElementById('eval_feedback').value = data.evaluasi.feedback || '';
+                document.getElementById('eval_rtl').value = data.evaluasi.rtl || '';
+            }
+
+            if (data.listGuru) {
+                listGuru = data.listGuru;
+                renderGuruTable();
+            }
+
+            if (data.perencanaan) {
+                setTableValues('#tbl-perencanaan', data.perencanaan, '.plan-score', '.plan-note', true);
+            }
+
+            if (data.pelaksanaan) {
+                setTableValues('#tbl-pelaksanaan', data.pelaksanaan, '.exec-score', '.exec-note', false);
+            }
+
+            calculateScores();
+            updateTTD();
+        }
+
+        function getTableValues(tableSelector, scoreClass, noteClass, hasAdaSelect) {
+            const result = [];
+            const rows = document.querySelectorAll(`${tableSelector} tr`);
+            rows.forEach(row => {
+                const score = row.querySelector(scoreClass)?.value || "4";
+                const note = row.querySelector(noteClass)?.value || "";
+                const item = { score, note };
+                if (hasAdaSelect) {
+                    item.ada = row.querySelector('select')?.value || "Ada";
+                }
+                result.push(item);
+            });
+            return result;
+        }
+
+        function setTableValues(tableSelector, dataArray, scoreClass, noteClass, hasAdaSelect) {
+            const rows = document.querySelectorAll(`${tableSelector} tr`);
+            rows.forEach((row, idx) => {
+                if (dataArray[idx]) {
+                    const scoreEl = row.querySelector(scoreClass);
+                    const noteEl = row.querySelector(noteClass);
+                    if (scoreEl) scoreEl.value = dataArray[idx].score || "3";
+                    if (noteEl) noteEl.value = dataArray[idx].note || "";
+                    if (hasAdaSelect) {
+                        const selectEl = row.querySelector('select');
+                        if (selectEl) selectEl.value = dataArray[idx].ada || "Ada";
+                    }
+                }
+            });
+        }
+
+        // =========================================================================
+        // 3. FUNGSI UTAMA MODUL SUPERVISI & TABEL
+        // =========================================================================
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            const targetTab = document.getElementById('sec-' + tabId);
+            if (targetTab) targetTab.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-indigo-600', 'ring-2', 'ring-white');
+                btn.classList.add('bg-indigo-800');
+            });
+
+            const activeBtn = document.getElementById('tab-' + tabId);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-indigo-800');
+                activeBtn.classList.add('bg-indigo-600', 'ring-2', 'ring-white');
+            }
+
+            if (tabId === 'evaluasi') calculateScores();
+        }
+
+        function renderPerencanaan() {
+            const tbody = document.getElementById('tbl-perencanaan');
+            tbody.innerHTML = '';
+            itemsPerencanaan.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+                tr.innerHTML = `
+                    <td class="p-3 border border-slate-300 text-center font-medium">${index + 1}</td>
+                    <td class="p-3 border border-slate-300 text-slate-700 font-medium">${item}</td>
+                    <td class="p-3 border border-slate-300 text-center">
+                        <select class="w-full text-xs p-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-indigo-500" onchange="calculateScores(); pushDataToFirebase();">
+                            <option value="Ada">Ada</option>
+                            <option value="Tidak">Tidak</option>
+                        </select>
+                    </td>
+                    <td class="p-3 border border-slate-300 text-center">
+                        <input type="number" min="1" max="4" value="4" class="plan-score w-16 text-center border border-slate-300 rounded p-1 text-sm font-semibold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" oninput="calculateScores(); updatePlanNoteSingle(${index}); pushDataToFirebase();">
+                    </td>
+                    <td class="p-3 border border-slate-300">
+                        <textarea placeholder="Catatan/saran..." rows="2" class="plan-note w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y" oninput="pushDataToFirebase()"></textarea>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderPelaksanaan() {
+            const tbody = document.getElementById('tbl-pelaksanaan');
+            tbody.innerHTML = '';
+            itemsPelaksanaan.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+                tr.innerHTML = `
+                    <td class="p-3 border border-slate-300 text-center font-medium">${index + 1}</td>
+                    <td class="p-3 border border-slate-300 text-slate-700 font-medium">${item}</td>
+                    <td class="p-3 border border-slate-300 text-center">
+                        <input type="number" min="1" max="4" value="3" class="exec-score w-16 text-center border border-slate-300 rounded p-1 text-sm font-semibold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" oninput="calculateScores(); updateExecNoteSingle(${index}); pushDataToFirebase();">
+                    </td>
+                    <td class="p-3 border border-slate-300">
+                        <textarea placeholder="Catatan pengamatan..." rows="2" class="exec-note w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y" oninput="pushDataToFirebase()"></textarea>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function getPlanNoteByScore(score) {
+            const notes = {
+                4: "Dokumen dirancang sangat lengkap, terstruktur, dan sepenuhnya memenuhi standar KMA 1503/2025.",
+                3: "Dokumen dirancang dengan baik, perlu sedikit pengayaan pada penyusunan asesmen dan pemetaan tindak lanjut.",
+                2: "Dokumen cukup memadai, namun perlu pembenahan pada penyelarasan indikator dan komponen diferensiasi.",
+                1: "Dokumen belum memenuhi standar; perlu penyusunan ulang dengan bimbingan dan arahan khusus."
+            };
+            return notes[score] || notes[3];
+        }
+
+        function getExecNoteByScore(score) {
+            const notes = {
+                4: "Pembelajaran berlangsung sangat efektif, ramah, interaktif, serta mencerminkan prinsip Deep Learning & Panca Cinta.",
+                3: "Pembelajaran terlaksana dengan baik, partisipasi siswa positif, perlu penguatan pada variasi diferensiasi.",
+                2: "Pembelajaran terlaksana namun partisipasi peserta didik masih terbatas; perlu perbaikan pengelolaan kelas.",
+                1: "Penguasaan kelas dan keterlibatan peserta didik kurang; memerlukan pendampingan klinis secara intensif."
+            };
+            return notes[score] || notes[3];
+        }
+
+        function updatePlanNoteSingle(index) {
+            const row = document.querySelectorAll('#tbl-perencanaan tr')[index];
+            if (!row) return;
+            const scoreInput = row.querySelector('.plan-score');
+            const noteInput = row.querySelector('.plan-note');
+            if (scoreInput && noteInput) {
+                const score = parseInt(scoreInput.value) || 3;
+                noteInput.value = getPlanNoteByScore(score);
+            }
+        }
+
+        function updateExecNoteSingle(index) {
+            const row = document.querySelectorAll('#tbl-pelaksanaan tr')[index];
+            if (!row) return;
+            const scoreInput = row.querySelector('.exec-score');
+            const noteInput = row.querySelector('.exec-note');
+            if (scoreInput && noteInput) {
+                const score = parseInt(scoreInput.value) || 3;
+                noteInput.value = getExecNoteByScore(score);
+            }
+        }
+
+        function autoFillPlanNotes() {
+            document.querySelectorAll('#tbl-perencanaan tr').forEach((row, idx) => updatePlanNoteSingle(idx));
+            pushDataToFirebase();
+            showToast("Catatan Perencanaan Berhasil Terisi Otomatis", "success");
+        }
+
+        function autoFillExecNotes() {
+            document.querySelectorAll('#tbl-pelaksanaan tr').forEach((row, idx) => updateExecNoteSingle(idx));
+            pushDataToFirebase();
+            showToast("Catatan Pelaksanaan Berhasil Terisi Otomatis", "success");
+        }
+
+        function calculateScores() {
+            const planInputs = document.querySelectorAll('.plan-score');
+            let planSum = 0;
+            planInputs.forEach(i => {
+                let val = parseFloat(i.value) || 1;
+                if (val > 4) { i.value = 4; val = 4; }
+                if (val < 1) { i.value = 1; val = 1; }
+                planSum += val;
+            });
+            const maxPlanScore = planInputs.length * 4;
+            const planFinalScore = maxPlanScore > 0 ? ((planSum / maxPlanScore) * 100).toFixed(1) : "0.0";
+            
+            document.getElementById('score-perencanaan').innerText = planFinalScore;
+            document.getElementById('final-plan').innerText = planFinalScore;
+
+            const execInputs = document.querySelectorAll('.exec-score');
+            let execSum = 0;
+            execInputs.forEach(i => {
+                let val = parseFloat(i.value) || 1;
+                if (val > 4) { i.value = 4; val = 4; }
+                if (val < 1) { i.value = 1; val = 1; }
+                execSum += val;
+            });
+            const maxExecScore = execInputs.length * 4;
+            const execFinalScore = maxExecScore > 0 ? ((execSum / maxExecScore) * 100).toFixed(1) : "0.0";
+
+            document.getElementById('score-pelaksanaan').innerText = execFinalScore;
+            document.getElementById('final-exec').innerText = execFinalScore;
+
+            const averageScore = parseFloat(((parseFloat(planFinalScore) + parseFloat(execFinalScore)) / 2).toFixed(1));
+            let predicate = "Perlu Bimbingan (D)";
+            if (averageScore >= 86) predicate = "Sangat Baik (A)";
+            else if (averageScore >= 70) predicate = "Baik (B)";
+            else if (averageScore >= 55) predicate = "Cukup (C)";
+
+            document.getElementById('final-predicate').innerText = `${predicate} (${averageScore})`;
+        }
+
+        function generateAutoEvaluation() {
+            const namaGuru = document.getElementById('nama_guru').value.trim() || "Guru";
+            const mapel = document.getElementById('mapel_kelas').value.trim() || "Mata Pelajaran";
+            const avgPlan = parseFloat(document.getElementById('score-perencanaan').innerText) || 0;
+            const avgExec = parseFloat(document.getElementById('score-pelaksanaan').innerText) || 0;
+            const combined = parseFloat(((avgPlan + avgExec) / 2).toFixed(1));
+
+            let refleksiText = "";
+            let feedbackText = "";
+            let rtlText = "";
+
+            if (combined >= 86) {
+                refleksiText = `Berdasarkan proses pembelajaran ${mapel}, saya telah berhasil merancang dan menerapkan Pembelajaran Mendalam (Mindful, Meaningful, Joyful) serta mengintegrasikan nilai Kurikulum Berbasis Cinta (KBC) secara harmonis. Tantangan berikutnya adalah mengimbaskan praktik baik ini ke rekan guru di madrasah.`;
+                feedbackText = `Apresiasi tinggi kepada ${namaGuru}. Perencanaan (skor ${avgPlan}) dan pelaksanaan (skor ${avgExec}) sangat selaras dengan prinsip KMA 1503 Tahun 2025. Terlihat suasana kelas yang ramah, berkesadaran, serta menguatkan karakter Panca Cinta murid.`;
+                rtlText = `1. Menjadi fasilitator / narasumber Berbagi Praktik Baik Pembelajaran Mendalam di Komunitas Belajar (Kombel) Madrasah / KKG / MGMP.\n2. Mengembangkan modul ajar inovatif berbasis Kurikulum Berbasis Cinta (KBC) dan Pembelajaran Mendalam.\n3. Melakukan pendampingan peer-coaching bagi guru di lingkungan madrasah.`;
+            } else if (combined >= 70) {
+                refleksiText = `Pembelajaran ${mapel} berjalan baik dan terstruktur. Namun, saya menyadari perlu menguatkan aspek Pembelajaran Bermakna (Meaningful) dengan mengaitkan materi secara lebih dalam pada integrasi ilmu-agama serta penguatan nilai Panca Cinta.`;
+                feedbackText = `Kinerja ${namaGuru} baik (Perencanaan: ${avgPlan}, Pelaksanaan: ${avgExec}). Struktur pengajaran telah memenuhi standar KMA 1503/2025. Disarankan untuk lebih mempervariasi strategi Pembelajaran Mendalam agar setiap peserta didik terlibat aktif.`;
+                rtlText = `1. Mengikuti pelatihan/workshop Kurikulum Berbasis Cinta (KBC) dan Pembelajaran Mendalam (Deep Learning) KMA 1503 Tahun 2025.\n2. Melakukan observasi sejawat (peer-observation) bersama Guru Penggerak / Guru Senior madrasah.\n3. Menyempurnakan rancangan asesmen formatif holistik pada Modul Ajar berikutnya.`;
+            } else {
+                refleksiText = `Saya merasa masih mengalami kesulitan dalam mengintegrasikan konsep Pembelajaran Mendalam dan pengelolaan kelas berbasis Kurikulum Berbasis Cinta pada mata pelajaran ${mapel}.`;
+                feedbackText = `${namaGuru} menunjukkan komitmen yang cukup. Namun beberapa indikator KMA 1503/2025 seperti menciptakan suasana belajar yang menggembirakan (joyful) dan penerapan asesmen formatif perlu ditingkatkan lagi.`;
+                rtlText = `1. Pendampingan klinis / Coaching terstruktur oleh Kepala Madrasah / Supervisor.\n2. Bimbingan penyusunan ulang Modul Ajar berbasis KMA 1503 Tahun 2025 bersama TIM Pengembang Kurikulum Madrasah.`;
+            }
+
+            document.getElementById('eval_refleksi').value = refleksiText;
+            document.getElementById('eval_feedback').value = feedbackText;
+            document.getElementById('eval_rtl').value = rtlText;
+
+            pushDataToFirebase();
+            showToast("Evaluasi & RTL Otomatis Berhasil Dibuat", "success");
+        }
+
+        // =========================================================================
+        // 4. DAFTAR GURU & EXCEL LOGIC
+        // =========================================================================
+
+        function renderGuruTable() {
+            const tbody = document.getElementById('tbl-guru-list');
+            const select = document.getElementById('select-guru-opt');
+            tbody.innerHTML = '';
+            select.innerHTML = '<option value="">-- Pilih Guru --</option>';
+
+            listGuru.forEach((g, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="p-3 border border-slate-300 text-center">${idx + 1}</td>
+                    <td class="p-3 border border-slate-300 font-semibold text-slate-800">${g.nama}</td>
+                    <td class="p-3 border border-slate-300">${g.nip || '-'}</td>
+                    <td class="p-3 border border-slate-300">${g.mapel || '-'}</td>
+                    <td class="p-3 border border-slate-300 text-center">
+                        <button type="button" onclick="selectGuruDirect(${g.id})" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-2.5 py-1 rounded font-medium mr-1" title="Pilih & Edit Form">
+                            <i class="fa-solid fa-pen-to-square"></i> Pilih
+                        </button>
+                        <button type="button" onclick="deleteGuru(${g.id})" class="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded" title="Hapus">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                const opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.nama + (g.mapel ? ` (${g.mapel})` : '');
+                select.appendChild(opt);
+            });
+        }
+
+        function loadSelectedGuru(id) {
+            if (!id) return;
+            const guru = listGuru.find(g => g.id == id);
+            if (guru) {
+                document.getElementById('nama_guru').value = guru.nama || '';
+                document.getElementById('nip_guru').value = guru.nip || '';
+                document.getElementById('mapel_kelas').value = guru.mapel || '';
+                document.getElementById('select-guru-opt').value = id;
+                updateTTD();
+                pushDataToFirebase();
+                showToast(`Data guru ${guru.nama} berhasil dimuat.`, 'info');
+            }
+        }
+
+        function selectGuruDirect(id) {
+            loadSelectedGuru(id);
+            switchTab('identitas');
+        }
+
+        function addGuruManual() {
+            const nama = document.getElementById('manual_nama').value.trim();
+            const nip = document.getElementById('manual_nip').value.trim();
+            const mapel = document.getElementById('manual_mapel').value.trim();
+
+            if (!nama) {
+                showToast('Silakan masukkan nama guru!', 'error');
+                return;
+            }
+
+            const newId = listGuru.length > 0 ? Math.max(...listGuru.map(g => g.id)) + 1 : 1;
+            listGuru.push({ id: newId, nama, nip, mapel });
+
+            document.getElementById('manual_nama').value = '';
+            document.getElementById('manual_nip').value = '';
+            document.getElementById('manual_mapel').value = '';
+
+            renderGuruTable();
+            pushDataToFirebase();
+            showToast('Guru baru berhasil ditambahkan.', 'success');
+        }
+
+        function deleteGuru(id) {
+            showConfirm('Hapus Guru', 'Apakah Anda yakin ingin menghapus data guru ini dari daftar?', () => {
+                listGuru = listGuru.filter(g => g.id !== id);
+                renderGuruTable();
+                pushDataToFirebase();
+                showToast('Data guru berhasil dihapus.', 'info');
+            });
+        }
+
+        function confirmClearAllGuru() {
+            showConfirm('Hapus Semua Guru', 'Apakah Anda yakin ingin menghapus SELURUH daftar guru? Tindakan ini tidak dapat dibatalkan.', () => {
+                listGuru = [];
+                renderGuruTable();
+                pushDataToFirebase();
+                showToast('Seluruh daftar guru telah dibersihkan.', 'info');
+            });
+        }
+
+        function downloadTemplateExcel() {
+            const templateData = [
+                ["Nama Guru", "NIP", "Mata Pelajaran / Kelas"],
+                ["Ahmad Azwar, S.Pd", "19872311871020006", "Bahasa Indonesia / Fase D / Kelas 7"],
+                ["Nur Zaman, S.Ag", "198804202011012003", "IPS / Fase D / Kelas 8"]
+            ];
+
+            const ws = XLSX.utils.aoa_to_sheet(templateData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template_Guru");
+            XLSX.writeFile(wb, "Template_Daftar_Guru_Madrasah.xlsx");
+        }
+
+        function updateTTD() {
+            const namaSekolah = document.getElementById('nama_sekolah').value.trim() || "Nama Madrasah / Satuan Pendidikan";
+            const tahunAjaran = document.getElementById('tahun_ajaran').value.trim() || "2026/2027";
+            const namaGuru = document.getElementById('nama_guru').value.trim() || "( Nama Guru )";
+            const nipGuru = document.getElementById('nip_guru').value.trim() || "-";
+            const namaSupervisor = document.getElementById('nama_supervisor').value.trim() || "( Nama Supervisor )";
+
+            document.getElementById('print-sekolah-title').innerText = namaSekolah;
+            document.getElementById('print-ta').innerText = tahunAjaran;
+            document.getElementById('ttd-guru-name').innerText = namaGuru;
+            document.getElementById('ttd-guru-nip').innerText = nipGuru;
+            document.getElementById('ttd-supervisor-name').innerText = namaSupervisor;
+        }
+
+        // INITIALIZATION ON LOAD
+        window.onload = function() {
+            // Berikan default Tahun Ajaran jika belum diisi
+            if(!document.getElementById('tahun_ajaran').value) {
+                document.getElementById('tahun_ajaran').value = "2026/2027";
+            }
+
+            renderPerencanaan();
+            renderPelaksanaan();
+            renderGuruTable();
+            calculateScores();
+            updateTTD();
+
+            // Pasang Listener Input untuk Sinkronisasi Otomatis ke Firebase
+            document.querySelectorAll('.sync-field').forEach(input => {
+                input.addEventListener('input', () => {
+                    updateTTD();
+                    pushDataToFirebase();
+                });
+            });
+
+            // Handle Excel Import
+            const excelInput = document.getElementById('excel-file-input');
+            if (excelInput) {
+                excelInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        try {
+                            const data = new Uint8Array(evt.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                            let importedCount = 0;
+                            for (let i = 1; i < json.length; i++) {
+                                const row = json[i];
+                                if (row && row[0]) {
+                                    const newId = listGuru.length > 0 ? Math.max(...listGuru.map(g => g.id)) + 1 : 1;
+                                    listGuru.push({
+                                        id: newId,
+                                        nama: String(row[0] || '').trim(),
+                                        nip: String(row[1] || '').trim(),
+                                        mapel: String(row[2] || '').trim()
+                                    });
+                                    importedCount++;
+                                }
+                            }
+                            renderGuruTable();
+                            pushDataToFirebase();
+                            excelInput.value = '';
+                            showToast(`Berhasil mengimpor ${importedCount} data guru!`, 'success');
+                        } catch (err) {
+                            console.error(err);
+                            showToast('Gagal mengimpor file Excel.', 'error');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+
+            // Jalankan Koneksi Real-time
+            initRealtimeSync();
+        };
+    </script>
+</body>
+</html>
