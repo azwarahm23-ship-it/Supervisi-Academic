@@ -1020,7 +1020,7 @@
                     reader.onload = function(evt) {
                         try {
                             const data = new Uint8Array(evt.target.result);
-                            const workbook = XLSX.read(data, { type: 'array' });
+                            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -1029,6 +1029,25 @@
                                 const row = json[i];
                                 if (row && (row[0] || row[2])) { // Cek jika ada Nama Sekolah atau Nama Guru
                                     const newId = listGuru.length > 0 ? Math.max(...listGuru.map(g => g.id)) + 1 : 1;
+                                    
+                                    // Format tanggal jika dibaca sebagai Date object atau String
+                                    let rawTgl = row[7];
+                                    let formattedTgl = "";
+                                    if (rawTgl instanceof Date) {
+                                        formattedTgl = rawTgl.toISOString().split('T')[0];
+                                    } else if (typeof rawTgl === 'string') {
+                                        formattedTgl = rawTgl.trim();
+                                    } else if (typeof rawTgl === 'number') {
+                                        // Handle format serial date Excel jika ada
+                                        const parsedDate = XLSX.SSF.parse_date_code(rawTgl);
+                                        if (parsedDate) {
+                                            const y = parsedDate.y;
+                                            const m = String(parsedDate.m).padStart(2, '0');
+                                            const d = String(parsedDate.d).padStart(2, '0');
+                                            formattedTgl = `${y}-${m}-${d}`;
+                                        }
+                                    }
+
                                     listGuru.push({
                                         id: newId,
                                         sekolah: String(row[0] || '').trim(),
@@ -1038,7 +1057,7 @@
                                         mapel: String(row[4] || '').trim(),
                                         supervisor: String(row[5] || '').trim(),
                                         nip_supervisor: String(row[6] || '').trim(),
-                                        tgl: String(row[7] || '').trim(),
+                                        tgl: formattedTgl,
                                         topik: String(row[8] || '').trim()
                                     });
                                     importedCount++;
