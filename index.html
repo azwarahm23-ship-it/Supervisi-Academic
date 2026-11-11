@@ -896,13 +896,21 @@
             if (!id) return;
             const guru = listGuru.find(g => g.id == id);
             if (guru) {
+                // Isi otomatis seluruh kolom Data Informasi Supervisi jika tersedia dari Excel / Input
+                if (guru.sekolah) document.getElementById('nama_sekolah').value = guru.sekolah;
+                if (guru.tahun) document.getElementById('tahun_ajaran').value = guru.tahun;
                 document.getElementById('nama_guru').value = guru.nama || '';
                 document.getElementById('nip_guru').value = guru.nip || '';
                 document.getElementById('mapel_kelas').value = guru.mapel || '';
+                if (guru.supervisor) document.getElementById('nama_supervisor').value = guru.supervisor;
+                if (guru.nip_supervisor) document.getElementById('nip_supervisor').value = guru.nip_supervisor;
+                if (guru.tgl) document.getElementById('tgl_supervisi').value = guru.tgl;
+                if (guru.topik) document.getElementById('topik_materi').value = guru.topik;
+
                 document.getElementById('select-guru-opt').value = id;
                 updateTTD();
                 pushDataToFirebase();
-                showToast(`Data guru ${guru.nama} berhasil dimuat.`, 'info');
+                showToast(`Data supervisi ${guru.nama} berhasil dimuat.`, 'info');
             }
         }
 
