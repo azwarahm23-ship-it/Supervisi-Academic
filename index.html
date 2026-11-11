@@ -104,6 +104,15 @@
                 <button onclick="switchTab('evaluasi')" id="tab-evaluasi" class="nav-btn bg-indigo-800 hover:bg-indigo-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
                     <i class="fa-solid fa-chart-line"></i> 4. Evaluasi & TL
                 </button>
+                <!-- TOMBOL DOWNLOAD & UPLOAD DATABASE REALTIME -->
+                <button onclick="downloadDatabaseJSON()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5" title="Download Cadangan Database Real-time (JSON)">
+                    <i class="fa-solid fa-download"></i> Backup DB
+                </button>
+                <button onclick="triggerUploadDatabaseJSON()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5" title="Restore Data dari Berkas JSON">
+                    <i class="fa-solid fa-upload"></i> Restore DB
+                </button>
+                <input type="file" id="db-json-input" accept=".json" class="hidden" onchange="uploadDatabaseJSON(event)">
+                
                 <button onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow transition flex items-center gap-2 ml-2">
                     <i class="fa-solid fa-print"></i> Cetak Dokumen
                 </button>
@@ -410,16 +419,16 @@
 
                 <div class="mt-12 pt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-center">
                     <div>
-                        <p class="text-sm text-slate-600">Guru Yang Disupervisi</p>
-                        <div class="h-20"></div>
-                        <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-guru-name">( Nama Guru )</p>
-                        <p class="text-xs text-slate-500 mt-1">NIP. <span id="ttd-guru-nip">-</span></p>
-                    </div>
-                    <div>
                         <p class="text-sm text-slate-600">Supervisor / Kepala Sekolah</p>
                         <div class="h-20"></div>
                         <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-supervisor-name">( Nama Supervisor )</p>
                         <p class="text-xs text-slate-500 mt-1">NIP. <span id="ttd-supervisor-nip">-</span></p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-600">Guru Yang Disupervisi</p>
+                        <div class="h-20"></div>
+                        <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-guru-name">( Nama Guru )</p>
+                        <p class="text-xs text-slate-500 mt-1">NIP. <span id="ttd-guru-nip">-</span></p>
                     </div>
                 </div>
 
@@ -469,6 +478,9 @@
             { id: 1, nama: "Nurzaman, S.Ag", nip: "198503122010011002", mapel: "IPS / Fase D / Kelas 8" },
             { id: 2, nama: "Ahmad Azwar", nip: "1987231187102006", mapel: "Bahasa Indonesia / Fase E / Kelas 7" }
         ];
+
+        // Menyimpan status ID guru yang sedang aktif disupervisi
+        let currentGuruId = null;
 
         // Indikator KMA 1503 Tahun 2025
         const itemsPerencanaan = [
@@ -570,11 +582,37 @@
             statusEl.innerHTML = text.includes('spin') ? text : `<i class="fa-solid fa-wifi mr-1"></i> ${text}`;
         }
 
-        // Kirim Seluruh Data Form ke Firebase Realtime DB
+        // Kirim Seluruh Data Form & Data Guru Aktif ke Firebase Realtime DB
         function pushDataToFirebase() {
             if (!db || isRemoteUpdate) return;
 
+            // Simpan detail form saat ini ke data guru yang sedang terpilih
+            if (currentGuruId) {
+                const guruObj = listGuru.find(g => g.id == currentGuruId);
+                if (guruObj) {
+                    guruObj.sekolah = document.getElementById('nama_sekolah').value;
+                    guruObj.tahun = document.getElementById('tahun_ajaran').value;
+                    guruObj.nama = document.getElementById('nama_guru').value;
+                    guruObj.nip = document.getElementById('nip_guru').value;
+                    guruObj.mapel = document.getElementById('mapel_kelas').value;
+                    guruObj.supervisor = document.getElementById('nama_supervisor').value;
+                    guruObj.nip_supervisor = document.getElementById('nip_supervisor').value;
+                    guruObj.tgl = document.getElementById('tgl_supervisi').value;
+                    guruObj.topik = document.getElementById('topik_materi').value;
+
+                    // Simpan data instrumen spesifik guru ini
+                    guruObj.perencanaan = getTableValues('#tbl-perencanaan', '.plan-score', '.plan-note', true);
+                    guruObj.pelaksanaan = getTableValues('#tbl-pelaksanaan', '.exec-score', '.exec-note', false);
+                    guruObj.evaluasi = {
+                        refleksi: document.getElementById('eval_refleksi').value,
+                        feedback: document.getElementById('eval_feedback').value,
+                        rtl: document.getElementById('eval_rtl').value
+                    };
+                }
+            }
+
             const formData = {
+                activeGuruId: currentGuruId,
                 identitas: {
                     nama_sekolah: document.getElementById('nama_sekolah').value,
                     tahun_ajaran: document.getElementById('tahun_ajaran').value,
@@ -601,6 +639,15 @@
 
         // Terapkan Data Realtime yang Diterima ke Antarmuka App
         function applyRemoteData(data) {
+            if (data.listGuru) {
+                listGuru = data.listGuru;
+                renderGuruTable();
+            }
+
+            if (data.activeGuruId) {
+                currentGuruId = data.activeGuruId;
+            }
+
             if (data.identitas) {
                 for (const key in data.identitas) {
                     const el = document.getElementById(key);
@@ -612,11 +659,6 @@
                 document.getElementById('eval_refleksi').value = data.evaluasi.refleksi || '';
                 document.getElementById('eval_feedback').value = data.evaluasi.feedback || '';
                 document.getElementById('eval_rtl').value = data.evaluasi.rtl || '';
-            }
-
-            if (data.listGuru) {
-                listGuru = data.listGuru;
-                renderGuruTable();
             }
 
             if (data.perencanaan) {
@@ -894,20 +936,35 @@
 
         function loadSelectedGuru(id) {
             if (!id) return;
+            currentGuruId = id;
             const guru = listGuru.find(g => g.id == id);
             if (guru) {
                 // Isi otomatis seluruh kolom Data Informasi Supervisi jika tersedia dari Excel / Input
-                if (guru.sekolah) document.getElementById('nama_sekolah').value = guru.sekolah;
-                if (guru.tahun) document.getElementById('tahun_ajaran').value = guru.tahun;
+                document.getElementById('nama_sekolah').value = guru.sekolah || '';
+                document.getElementById('tahun_ajaran').value = guru.tahun || '2026/2027';
                 document.getElementById('nama_guru').value = guru.nama || '';
                 document.getElementById('nip_guru').value = guru.nip || '';
                 document.getElementById('mapel_kelas').value = guru.mapel || '';
-                if (guru.supervisor) document.getElementById('nama_supervisor').value = guru.supervisor;
-                if (guru.nip_supervisor) document.getElementById('nip_supervisor').value = guru.nip_supervisor;
-                if (guru.tgl) document.getElementById('tgl_supervisi').value = guru.tgl;
-                if (guru.topik) document.getElementById('topik_materi').value = guru.topik;
+                document.getElementById('nama_supervisor').value = guru.supervisor || '';
+                document.getElementById('nip_supervisor').value = guru.nip_supervisor || '';
+                document.getElementById('tgl_supervisi').value = guru.tgl || '';
+                document.getElementById('topik_materi').value = guru.topik || '';
+
+                // Muat instrumen perencanaan/pelaksanaan/evaluasi jika guru ini sudah memiliki data sebelumnya
+                if (guru.perencanaan) {
+                    setTableValues('#tbl-perencanaan', guru.perencanaan, '.plan-score', '.plan-note', true);
+                }
+                if (guru.pelaksanaan) {
+                    setTableValues('#tbl-pelaksanaan', guru.pelaksanaan, '.exec-score', '.exec-note', false);
+                }
+                if (guru.evaluasi) {
+                    document.getElementById('eval_refleksi').value = guru.evaluasi.refleksi || '';
+                    document.getElementById('eval_feedback').value = guru.evaluasi.feedback || '';
+                    document.getElementById('eval_rtl').value = guru.evaluasi.rtl || '';
+                }
 
                 document.getElementById('select-guru-opt').value = id;
+                calculateScores();
                 updateTTD();
                 pushDataToFirebase();
                 showToast(`Data supervisi ${guru.nama} berhasil dimuat.`, 'info');
@@ -986,6 +1043,84 @@
             document.getElementById('ttd-guru-nip').innerText = nipGuru;
             document.getElementById('ttd-supervisor-name').innerText = namaSupervisor;
             document.getElementById('ttd-supervisor-nip').innerText = nipSupervisor;
+        }
+
+        // =========================================================================
+        // 5. FITUR DOWNLOAD & UPLOAD DATABASE REALTIME (JSON BACKUP / RESTORE)
+        // =========================================================================
+        
+        function downloadDatabaseJSON() {
+            const currentData = {
+                supervisi_data: {
+                    identitas: {
+                        nama_sekolah: document.getElementById('nama_sekolah').value,
+                        tahun_ajaran: document.getElementById('tahun_ajaran').value,
+                        nama_guru: document.getElementById('nama_guru').value,
+                        nip_guru: document.getElementById('nip_guru').value,
+                        mapel_kelas: document.getElementById('mapel_kelas').value,
+                        nama_supervisor: document.getElementById('nama_supervisor').value,
+                        nip_supervisor: document.getElementById('nip_supervisor').value,
+                        tgl_supervisi: document.getElementById('tgl_supervisi').value,
+                        topik_materi: document.getElementById('topik_materi').value
+                    },
+                    evaluasi: {
+                        refleksi: document.getElementById('eval_refleksi').value,
+                        feedback: document.getElementById('eval_feedback').value,
+                        rtl: document.getElementById('eval_rtl').value
+                    },
+                    perencanaan: getTableValues('#tbl-perencanaan', '.plan-score', '.plan-note', true),
+                    pelaksanaan: getTableValues('#tbl-pelaksanaan', '.exec-score', '.exec-note', false),
+                    listGuru: listGuru
+                }
+            };
+
+            const jsonStr = JSON.stringify(currentData, null, 2);
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Backup_Supervisi_Database_${dateStr}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            showToast("Database berhasil diunduh!", "success");
+        }
+
+        function triggerUploadDatabaseJSON() {
+            document.getElementById('db-json-input').click();
+        }
+
+        function uploadDatabaseJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsedData = JSON.parse(e.target.result);
+                    const dbData = parsedData.supervisi_data || parsedData;
+
+                    if (dbData) {
+                        applyRemoteData(dbData);
+                        if (db) {
+                            db.ref('supervisi_data').set(dbData);
+                        }
+                        showToast("Database berhasil dipulihkan & disinkronisasi!", "success");
+                    } else {
+                        showToast("Format file JSON tidak sesuai.", "error");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast("Gagal membaca berkas JSON.", "error");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
         }
 
         // INITIALIZATION ON LOAD
