@@ -178,10 +178,14 @@
                         <input type="text" id="nama_supervisor" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nama Supervisor & Gelar">
                     </div>
                     <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">NIP Supervisor / Kepala Sekolah</label>
+                        <input type="text" id="nip_supervisor" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="NIP Supervisor / Kepala Sekolah">
+                    </div>
+                    <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Tanggal Supervisi</label>
                         <input type="date" id="tgl_supervisi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                     </div>
-                    <div>
+                    <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Tujuan Pembelajaran / Topik Materi</label>
                         <input type="text" id="topik_materi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Tuliskan materi/konsep utama yang diamati">
                     </div>
@@ -210,7 +214,7 @@
                         <h3 class="font-bold text-emerald-800 text-sm mb-1 flex items-center gap-2">
                             <i class="fa-solid fa-file-excel text-emerald-600"></i> Import Data dari File Excel
                         </h3>
-                        <p class="text-xs text-emerald-700 mb-3">Format kolom Excel: <b>Nama Guru</b>, <b>NIP</b>, <b>Mata Pelajaran / Kelas</b></p>
+                        <p class="text-xs text-emerald-700 mb-3">Format kolom Excel: <b>Nama Sekolah</b>, <b>Tahun Ajaran</b>, <b>Nama Guru</b>, <b>NIP Guru</b>, <b>Mata Pelajaran / Kelas</b>, <b>Nama Supervisor</b>, <b>NIP Supervisor</b>, <b>Tanggal Supervisi</b>, <b>Topik Materi</b></p>
                         
                         <div class="flex items-center gap-2">
                             <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer">
@@ -415,7 +419,7 @@
                         <p class="text-sm text-slate-600">Supervisor / Kepala Sekolah</p>
                         <div class="h-20"></div>
                         <p class="font-bold border-b border-slate-400 inline-block px-4" id="ttd-supervisor-name">( Nama Supervisor )</p>
-                        <p class="text-xs text-slate-500 mt-1">NIP/NIDN. -</p>
+                        <p class="text-xs text-slate-500 mt-1">NIP. <span id="ttd-supervisor-nip">-</span></p>
                     </div>
                 </div>
 
@@ -578,6 +582,7 @@
                     nip_guru: document.getElementById('nip_guru').value,
                     mapel_kelas: document.getElementById('mapel_kelas').value,
                     nama_supervisor: document.getElementById('nama_supervisor').value,
+                    nip_supervisor: document.getElementById('nip_supervisor').value,
                     tgl_supervisi: document.getElementById('tgl_supervisi').value,
                     topik_materi: document.getElementById('topik_materi').value
                 },
@@ -948,15 +953,15 @@
 
         function downloadTemplateExcel() {
             const templateData = [
-                ["Nama Guru", "NIP", "Mata Pelajaran / Kelas"],
-                ["Ahmad Azwar, S.Pd", "19872311871020006", "Bahasa Indonesia / Fase D / Kelas 7"],
-                ["Nur Zaman, S.Ag", "198804202011012003", "IPS / Fase D / Kelas 8"]
+                ["Nama Sekolah", "Tahun Ajaran", "Nama Guru", "NIP Guru", "Mata Pelajaran / Kelas", "Nama Supervisor", "NIP Supervisor", "Tanggal Supervisi", "Topik Materi"],
+                ["MTs. Tajhiz Diniyah", "2026/2027", "Ahmad Azwar, S.Pd", "19872311871020006", "Bahasa Indonesia / Fase D / Kelas 7", "H. Abdullah, M.Pd", "197508152002121001", "2026-03-15", "Teks Laporan Hasil Observasi"],
+                ["MTs. Tajhiz Diniyah", "2026/2027", "Nur Zaman, S.Ag", "198804202011012003", "IPS / Fase D / Kelas 8", "H. Abdullah, M.Pd", "197508152002121001", "2026-03-16", "Interaksi Sosial dan Perkembangan Ekonomi"]
             ];
 
             const ws = XLSX.utils.aoa_to_sheet(templateData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Template_Guru");
-            XLSX.writeFile(wb, "Template_Daftar_Guru_Madrasah.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "Template_Supervisi");
+            XLSX.writeFile(wb, "Template_Supervisi_Akademik_Lengkap.xlsx");
         }
 
         function updateTTD() {
@@ -965,12 +970,14 @@
             const namaGuru = document.getElementById('nama_guru').value.trim() || "( Nama Guru )";
             const nipGuru = document.getElementById('nip_guru').value.trim() || "-";
             const namaSupervisor = document.getElementById('nama_supervisor').value.trim() || "( Nama Supervisor )";
+            const nipSupervisor = document.getElementById('nip_supervisor').value.trim() || "-";
 
             document.getElementById('print-sekolah-title').innerText = namaSekolah;
             document.getElementById('print-ta').innerText = tahunAjaran;
             document.getElementById('ttd-guru-name').innerText = namaGuru;
             document.getElementById('ttd-guru-nip').innerText = nipGuru;
             document.getElementById('ttd-supervisor-name').innerText = namaSupervisor;
+            document.getElementById('ttd-supervisor-nip').innerText = nipSupervisor;
         }
 
         // INITIALIZATION ON LOAD
@@ -1012,13 +1019,19 @@
                             let importedCount = 0;
                             for (let i = 1; i < json.length; i++) {
                                 const row = json[i];
-                                if (row && row[0]) {
+                                if (row && (row[0] || row[2])) { // Cek jika ada Nama Sekolah atau Nama Guru
                                     const newId = listGuru.length > 0 ? Math.max(...listGuru.map(g => g.id)) + 1 : 1;
                                     listGuru.push({
                                         id: newId,
-                                        nama: String(row[0] || '').trim(),
-                                        nip: String(row[1] || '').trim(),
-                                        mapel: String(row[2] || '').trim()
+                                        sekolah: String(row[0] || '').trim(),
+                                        tahun: String(row[1] || '').trim(),
+                                        nama: String(row[2] || '').trim(),
+                                        nip: String(row[3] || '').trim(),
+                                        mapel: String(row[4] || '').trim(),
+                                        supervisor: String(row[5] || '').trim(),
+                                        nip_supervisor: String(row[6] || '').trim(),
+                                        tgl: String(row[7] || '').trim(),
+                                        topik: String(row[8] || '').trim()
                                     });
                                     importedCount++;
                                 }
@@ -1026,7 +1039,7 @@
                             renderGuruTable();
                             pushDataToFirebase();
                             excelInput.value = '';
-                            showToast(`Berhasil mengimpor ${importedCount} data guru!`, 'success');
+                            showToast(`Berhasil mengimpor ${importedCount} data informasi supervisi!`, 'success');
                         } catch (err) {
                             console.error(err);
                             showToast('Gagal mengimpor file Excel.', 'error');
