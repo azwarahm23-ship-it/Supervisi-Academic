@@ -183,7 +183,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Tanggal Supervisi</label>
-                        <input type="date" id="tgl_supervisi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        <input type="text" id="tgl_supervisi" class="sync-field w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Contoh: 15 Maret 2026">
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Tujuan Pembelajaran / Topik Materi</label>
@@ -1020,7 +1020,7 @@
                     reader.onload = function(evt) {
                         try {
                             const data = new Uint8Array(evt.target.result);
-                            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                            const workbook = XLSX.read(data, { type: 'array', cellDates: false });
                             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -1030,23 +1030,9 @@
                                 if (row && (row[0] || row[2])) { // Cek jika ada Nama Sekolah atau Nama Guru
                                     const newId = listGuru.length > 0 ? Math.max(...listGuru.map(g => g.id)) + 1 : 1;
                                     
-                                    // Format tanggal jika dibaca sebagai Date object atau String
+                                    // Ambil tanggal sebagai string teks biasa tanpa parsing khusus
                                     let rawTgl = row[7];
-                                    let formattedTgl = "";
-                                    if (rawTgl instanceof Date) {
-                                        formattedTgl = rawTgl.toISOString().split('T')[0];
-                                    } else if (typeof rawTgl === 'string') {
-                                        formattedTgl = rawTgl.trim();
-                                    } else if (typeof rawTgl === 'number') {
-                                        // Handle format serial date Excel jika ada
-                                        const parsedDate = XLSX.SSF.parse_date_code(rawTgl);
-                                        if (parsedDate) {
-                                            const y = parsedDate.y;
-                                            const m = String(parsedDate.m).padStart(2, '0');
-                                            const d = String(parsedDate.d).padStart(2, '0');
-                                            formattedTgl = `${y}-${m}-${d}`;
-                                        }
-                                    }
+                                    let formattedTgl = rawTgl ? String(rawTgl).trim() : "";
 
                                     listGuru.push({
                                         id: newId,
